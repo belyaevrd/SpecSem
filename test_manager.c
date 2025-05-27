@@ -4,7 +4,7 @@
 #include <math.h>
 
 double LEFT  = 0;
-double RIGHT = 10;
+double RIGHT = 1000000;
 double PRECISION = 0.01;
 
 struct task {
@@ -16,7 +16,7 @@ struct task {
 
 // Вычисление одного шага по формуле остаточного члена метода прямоугольников
 static double get_step() {
-    double max_ddf = exp(RIGHT);
+    double max_ddf = (RIGHT);
     if (max_ddf == 0) {
         return 1;
     }

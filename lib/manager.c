@@ -346,7 +346,7 @@ int start_manager(INFO_MANAGER *manager, size_t size_of_structure, size_t num_ta
             goto error_close;
         }
 
-        fprintf(stderr, "[start_manager] pollret=%d\n", pollret);
+        // fprintf(stderr, "[start_manager] pollret=%d\n", pollret);
         // if (pollret != num_tasks) {
         //     fprintf(stderr, "Some workers didn't send their answers\n");
         //     goto error_close;

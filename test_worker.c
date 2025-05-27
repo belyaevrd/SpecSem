@@ -41,7 +41,7 @@ void *func(void *t_args)
     struct task *args = (struct task *) t_args;
     printf("step=%lf, left=%lf, parts=%lld\n", args->step, args->left, args->parts);
     for (long long i = 0; i < args->parts; ++i) {
-        result += args->step * exp(args->left + args->step * i + args->step / 2);
+        result += args->step * (args->left + args->step * i + args->step / 2);
     }
 
     worker_add_result(&worker, (char *)&result, add_func);

@@ -78,52 +78,11 @@ time: $(EXECUTABLE) $(DUMMY_DST)
 TEST_COUNTING=0
 ARGS=
 
-test/%: %.c test.c
-	@mkdir -p test
-ifeq ($(TEST_COUNTING),1)
-	@printf "Testing counting function:\n"
-	$(CC) $^ $(CFLAGS) -DTEST -DDEBUG -o $@ $(LDFLAGS)
-	./$@
-else
-	@printf "Testing connection: $(ARGS)\n"
-	$(CC) $^ $(CFLAGS) -DDEBUG -o $@ $(LDFLAGS)
-	./$@ $(ARGS)
-endif
 
 test_clean:
 	@printf "$(BYELLOW)Cleaning test directory$(RESET)\n"
 	@rm -rf test
 
-simple_manager:
-	gcc manager.c test_manager.c -o manager -lm
-	./manager 127.0.0.1 1337 10 4
-
-simple_worker:
-	gcc worker.c test_worker.c -lm -o worker
-	./worker 127.0.0.1 1337
-
-lib_works: clean
-	gcc -c -fPIC manager.c
-	gcc -c -fPIC worker.c
-	gcc -shared manager.o worker.o -o libcounting.so
-	gcc -c test_manager.c -lm
-	gcc -c test_worker.c -lm
-	gcc test_manager.o -L . -lcounting -L /usr/lib -lm -o manager #-Wl,-rpath,`pwd`
-	gcc test_worker.o  -L . -lcounting -L /usr/lib -lm -o worker  #-Wl,-rpath,`pwd`
-	LD_LIBRARY_PATH=. ./manager 127.0.0.1 1337 10 1 &
-	LD_LIBRARY_PATH=. ./worker 127.0.0.1 1337 &
-	
-lib_: clean
-	gcc -c -fPIC lib/manager.c -o lib/manager.o
-	gcc -c -fPIC lib/worker.c -o lib/worker.o
-	gcc -shared lib/manager.o lib/worker.o -o lib/libcounting.so
-	rm lib/manager.o lib/worker.o
-	gcc -c test_manager.c -lm
-	gcc -c test_worker.c -lm
-	gcc test_manager.o -L lib -lcounting -L /usr/lib -lm -o manager #-Wl,-rpath,`pwd`
-	gcc test_worker.o  -L lib -lcounting -L /usr/lib -lm -o worker  #-Wl,-rpath,`pwd`
-	LD_LIBRARY_PATH=lib ./manager 127.0.0.1 1337 10 1 &
-	LD_LIBRARY_PATH=lib ./worker 127.0.0.1 1337 &
 
 ##################################################################################################
 ADDR=127.0.0.1
@@ -134,10 +93,23 @@ LCOV_FLAGS=--coverage -fcondition-coverage
 
 main: clean libcounting build_manager build_worker
 
-lcov: clean 
+lcov__: clean 
+	gcc -c -fPIC lib/manager.c -o lib/manager.o --coverage
+	gcc -c -fPIC lib/worker.c -o lib/worker.o --coverage
+	gcc -shared lib/manager.o lib/worker.o -o lib/libcounting.so
+	rm lib/manager.o lib/worker.o
 	gcc --coverage -fcondition-coverage lib/manager.c test_manager.c -o build/manager -lm
 	gcc --coverage -fcondition-coverage lib/worker.c test_worker.c -o build/worker -lm
 	build/manager $(ADDR) $(PORT) $(TIME) $(NODES) &
+	build/worker $(ADDR) $(PORT) &
+	lcov --branch-coverage --mcdc-coverage --gcov-tool=gcov -d . -c -o lcov.info
+	genhtml --function-coverage --branch-coverage --mcdc-coverage lcov.info
+
+lcov: clean 
+	gcc --coverage -fcondition-coverage lib/manager.c test_manager.c -o build/manager -lm
+	gcc --coverage -fcondition-coverage lib/worker.c test_worker.c -o build/worker -lm
+	build/manager $(ADDR) $(PORT) $(TIME) 2 &
+	build/worker $(ADDR) $(PORT) &
 	build/worker $(ADDR) $(PORT) &
 	lcov --branch-coverage --mcdc-coverage --gcov-tool=gcov -d . -c -o lcov.info
 	genhtml --function-coverage --branch-coverage --mcdc-coverage lcov.info
@@ -162,30 +134,37 @@ manager: build_manager
 worker: build_worker
 	LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT)
 
-TEST: main
-	@LD_LIBRARY_PATH=lib build/manager $(ADDR) $(PORT) $(TIME) $(NODES) &
+test: main
+	# @LD_LIBRARY_PATH=lib build/manager $(ADDR) $(PORT) $(TIME) $(NODES) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @echo "TEST 1: COMPLETED"
+	# @time LD_LIBRARY_PATH=lib build/manager $(ADDR) $(PORT) $(TIME) 2 &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @echo "TEST 2: COMPLETED"
+	@time LD_LIBRARY_PATH=lib build/manager $(ADDR) $(PORT) $(TIME) 1 &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
 	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@echo "TEST 1: COMPLETED"
-	@LD_LIBRARY_PATH=lib build/manager $(ADDR) $(PORT) $(TIME) 2 &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@echo "TEST 2: COMPLETED"
-	@LD_LIBRARY_PATH=lib build/manager $(ADDR) $(PORT) $(TIME) 8 &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	sleep 1
-	@echo "TEST 3: COMPLETED"
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
+	# sleep 1
+	# @echo "TEST 3: COMPLETED"
 
 
 ##################################################################################################
 
-test: clean
+TEST: clean
 	gcc manager.c test_manager.c -o manager -lm
 	gcc worker.c test_worker.c -lm -o worker
 	./manager 127.0.0.1 1337 10 4 &
