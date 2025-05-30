@@ -121,11 +121,11 @@ test: all
 	@printf "$(BYELLOW)TEST 2:$(RESET)\n"
 	LD_LIBRARY_PATH=build build/manager $(ADDR) $(PORT) $(TIME) 2
 	#3
-	for i in $$(seq 1 3) ; do \
+	for i in $$(seq 1 4) ; do \
 		time LD_LIBRARY_PATH=build build/worker $(ADDR) $(PORT) $(CORES) & \
 	done
 	@printf "$(BYELLOW)TEST 3:$(RESET)\n"
-	LD_LIBRARY_PATH=build build/manager $(ADDR) $(PORT) $(TIME) 3
+	LD_LIBRARY_PATH=build build/manager $(ADDR) $(PORT) $(TIME) 4
 
 
 ##################################################################################################
