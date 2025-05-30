@@ -103,6 +103,7 @@ static bool send_node_info(INFO_WORKER *worker)
 
 int distributed_counting(INFO_WORKER *worker, void*(thread_func(void*)))
 {
+    time_t start_time = time(NULL);
     // Проверка валидности запрашиваемого числа ядер
     if (worker->n_cores > get_nprocs()) {
         fprintf(stderr, 
@@ -111,44 +112,25 @@ int distributed_counting(INFO_WORKER *worker, void*(thread_func(void*)))
     }
 
     int threads_num = worker->n_cores;
+    
     if (!threads_num) {
         fprintf(stderr, "Number of required cores should be greater than zero\n");
         exit(EXIT_FAILURE);
+    } else if (threads_num == 1) {
+        thread_func(worker->data);
+        fprintf(stderr, "TIME: %d\nn_cores=%d\n", time(NULL) - start_time, worker->n_cores);
+        return 0;
     }
     pthread_t threads[threads_num];
     char *args[threads_num];
 
     for (int i = 0; i < threads_num; ++i) {
-        // Выбор ядра для выполнения потока.
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-        CPU_SET(i % worker->n_cores, &cpuset);
-        
-        pthread_attr_t thread_attr;
-        if(pthread_attr_init(&thread_attr)) {
-            fprintf(stderr, "pthread_attr_init returns with error\n");
-            return -1;
-        }
-
-        // Устанавливаем аффинность потока.
-        if (pthread_attr_setaffinity_np(&thread_attr, sizeof(cpuset), &cpuset)) {
-            fprintf(stderr, "pthread_attr_setaffinity_np returns with error\n");
-            return -1;
-        }
-
         args[i] = worker->data + worker->size_of_structure * i;
          
-        if (pthread_create(&threads[i], &thread_attr, thread_func, args[i])) {
+        if (pthread_create(&threads[i], NULL, thread_func, args[i])) {
             fprintf(stderr, "Unable to create thread\n");
             return -1;
         }
-
-        // Удаляем объект аттрибутов потока.
-        if (pthread_attr_destroy(&thread_attr)) {
-            fprintf(stderr, "Unable to destroy a thread attributes object\n");
-            return -1;
-        }
-
     }
 
     // Ждём завершения потоков
@@ -159,6 +141,7 @@ int distributed_counting(INFO_WORKER *worker, void*(thread_func(void*)))
             return -1;
         }
     }
+    fprintf(stderr, "TIME: %d\nn_cores=%d\n", time(NULL) - start_time, worker->n_cores);
 
     return 0;
 }

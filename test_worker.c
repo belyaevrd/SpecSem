@@ -36,15 +36,22 @@ void add_func(char *a, char *b)
 
 void *func(void *t_args)
 {
+    time_t start_time = time(NULL);
     printf("Begin counting\n");
     double result = 0;
     struct task *args = (struct task *) t_args;
     printf("step=%lf, left=%lf, parts=%lld\n", args->step, args->left, args->parts);
-    for (long long i = 0; i < args->parts; ++i) {
-        result += args->step * (args->left + args->step * i + args->step / 2);
+    double left = args->left;
+    double step = args->step;
+    double parts = args->parts;
+    double x = left + step / 2;
+    for (long long i = 0; i < parts; ++i) {
+        result += step * sin(x);
+        x += step;
     }
 
     worker_add_result(&worker, (char *)&result, add_func);
+    fprintf(stderr, "TIME #: %ds\n", time(NULL) - start_time);
     return NULL;
 }
 
@@ -85,11 +92,14 @@ int main( int argc, char** argv)
     test();
 #else
     time_t max_time = 10;
-    int n_cores = 1;
-    if (argc != 3)
-    {
-        fprintf(stderr, "Usage: worker <addr> <port>\n");
-        exit(EXIT_FAILURE);
+    if (argc != 4) {
+        fprintf(stderr, "Usage: %s <address> <port> <num_cores>\n", argv[0]);
+        return 1;
+    }
+    int n_cores = atol(argv[3]);
+    if (!n_cores) {
+        fprintf(stderr, "Number of nodes should be positive!\n");
+        return 1;
     }
 
     if (init_worker(&worker, sizeof(struct task), sizeof(double), n_cores, max_time, argv[1], argv[2])) {

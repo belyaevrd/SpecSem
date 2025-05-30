@@ -1,14 +1,14 @@
-ifeq ($(PROGRAM),)
-error:
-	@printf "$(BRED)Specify build target!\n"
-endif
+# ifeq ($(PROGRAM),)
+# error:
+# 	@printf "$(BRED)Specify build target!\n"
+# endif
 
 EXECUTABLE = build/$(PROGRAM)
 TEST_EXEC = test/$(PROGRAM)
 
 # By default, build executable:
 # NOTE: first target in the file is the default.
-default: $(EXECUTABLE)
+default: all
 
 #-----------------------
 # Compiler/linker flags
@@ -48,23 +48,9 @@ GREEN   = \033[1;35m
 BCYAN   = \033[1;36m
 RESET   = \033[0m
 
-#-------------
-# Copied file
-#-------------
-
-DUMMY_DST = build/dummy_dst
-
 #-------------------
 # Build/run process
 #-------------------
-
-build/%: %.c
-	@printf "$(BYELLOW)Building program $(BCYAN)$<$(RESET)\n"
-	@mkdir -p build
-	$(CC) $< $(CFLAGS) -o $@ $(LDFLAGS)
-
-run: $(EXECUTABLE)
-	@./$(EXECUTABLE) $(DUMMY_DST)
 
 # Timing command usage:
 TIME_CMD    = /usr/bin/time
@@ -74,122 +60,85 @@ TIME_FORMAT = \
 time: $(EXECUTABLE) $(DUMMY_DST)
 	@$(TIME_CMD) --quiet --format=$(TIME_FORMAT) $(EXECUTABLE) $(DUMMY_DST) | cat
 
-
-TEST_COUNTING=0
-ARGS=
-
-
-test_clean:
-	@printf "$(BYELLOW)Cleaning test directory$(RESET)\n"
-	@rm -rf test
-
-
 ##################################################################################################
 ADDR=127.0.0.1
 PORT=1337
-TIME=10
+TIME=12
 NODES=1
-LCOV_FLAGS=--coverage -fcondition-coverage
+CORES=1
 
-main: clean libcounting build_manager build_worker
+all: clean_and_build libcounting build_manager build_worker
 
-lcov__: clean 
-	gcc -c -fPIC lib/manager.c -o lib/manager.o --coverage
-	gcc -c -fPIC lib/worker.c -o lib/worker.o --coverage
-	gcc -shared lib/manager.o lib/worker.o -o lib/libcounting.so
-	rm lib/manager.o lib/worker.o
-	gcc --coverage -fcondition-coverage lib/manager.c test_manager.c -o build/manager -lm
-	gcc --coverage -fcondition-coverage lib/worker.c test_worker.c -o build/worker -lm
-	build/manager $(ADDR) $(PORT) $(TIME) $(NODES) &
-	build/worker $(ADDR) $(PORT) &
-	lcov --branch-coverage --mcdc-coverage --gcov-tool=gcov -d . -c -o lcov.info
-	genhtml --function-coverage --branch-coverage --mcdc-coverage lcov.info
-
-lcov: clean 
-	gcc --coverage -fcondition-coverage lib/manager.c test_manager.c -o build/manager -lm
-	gcc --coverage -fcondition-coverage lib/worker.c test_worker.c -o build/worker -lm
+lcov: clean_and_build
+	@printf "$(BYELLOW)Start $(BCYAN)LCOV testing$(RESET)\n"
+	@gcc --coverage lib/manager.c test_manager.c -o build/manager -lm
+	@gcc --coverage lib/worker.c test_worker.c -o build/worker -lm
 	build/manager $(ADDR) $(PORT) $(TIME) 2 &
-	build/worker $(ADDR) $(PORT) &
-	build/worker $(ADDR) $(PORT) &
-	lcov --branch-coverage --mcdc-coverage --gcov-tool=gcov -d . -c -o lcov.info
-	genhtml --function-coverage --branch-coverage --mcdc-coverage lcov.info
+	build/worker $(ADDR) $(PORT) $(CORES) &
+	build/worker $(ADDR) $(PORT) $(CORES) &
+	sleep 10
+	@lcov --branch-coverage --gcov-tool=gcov -d . -c -o lcov.info
+	@genhtml --function-coverage --branch-coverage lcov.info
 
 build_manager: libcounting
-	gcc -c test_manager.c -lm -o build/test_manager.o
-	gcc build/test_manager.o -L lib -lcounting -L /usr/lib -lm -o build/manager
+	@printf "$(BYELLOW)Building $(BCYAN)manager$(RESET)\n"
+	@gcc -c test_manager.c -lm -o build/test_manager.o
+	@gcc build/test_manager.o -L build -lcounting -L /usr/lib -lm -o build/manager
+	@rm build/test_manager.o
 
 build_worker: libcounting
-	gcc -c test_worker.c -lm -o build/test_worker.o
-	gcc build/test_worker.o  -L lib -lcounting -L /usr/lib -lm -o build/worker
+	@printf "$(BYELLOW)Building $(BCYAN)worker$(RESET)\n"
+	@gcc -c test_worker.c -lm -o build/test_worker.o
+	@gcc build/test_worker.o  -L build -lcounting -L /usr/lib -lm -o build/worker
+	@rm build/test_worker.o
 
 libcounting:
-	gcc -c -fPIC lib/manager.c -o lib/manager.o
-	gcc -c -fPIC lib/worker.c -o lib/worker.o
-	gcc -shared lib/manager.o lib/worker.o -o lib/libcounting.so
-	rm lib/manager.o lib/worker.o
+	@printf "$(BYELLOW)Building $(BCYAN)library$(RESET)\n"
+	@gcc -c -fPIC lib/manager.c -o build/manager.o
+	@gcc -c -fPIC lib/worker.c -o build/worker.o
+	@gcc -shared build/manager.o build/worker.o -o build/libcounting.so
+	@rm build/manager.o build/worker.o
 
 manager: build_manager
-	LD_LIBRARY_PATH=lib build/manager $(ADDR) $(PORT) $(TIME) $(NODES)
+	LD_LIBRARY_PATH=build build/manager $(ADDR) $(PORT) $(TIME) $(NODES)
 
 worker: build_worker
-	LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT)
+	for i in $$(seq 1 $(NODES)) ; do \
+		time LD_LIBRARY_PATH=build build/worker $(ADDR) $(PORT) $(CORES) & \
+	done
 
-test: main
-	# @LD_LIBRARY_PATH=lib build/manager $(ADDR) $(PORT) $(TIME) $(NODES) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @echo "TEST 1: COMPLETED"
-	# @time LD_LIBRARY_PATH=lib build/manager $(ADDR) $(PORT) $(TIME) 2 &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @echo "TEST 2: COMPLETED"
-	@time LD_LIBRARY_PATH=lib build/manager $(ADDR) $(PORT) $(TIME) 1 &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	@LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# @LD_LIBRARY_PATH=lib build/worker $(ADDR) $(PORT) &
-	# sleep 1
-	# @echo "TEST 3: COMPLETED"
+test: all
+	#1
+	@printf "$(BYELLOW)TEST 1:$(RESET)\n"
+	for i in $$(seq 1 1) ; do \
+		time LD_LIBRARY_PATH=build build/worker $(ADDR) $(PORT) $(CORES) & \
+	done
+	LD_LIBRARY_PATH=build build/manager $(ADDR) $(PORT) $(TIME) 1 
+	#2
+	for i in $$(seq 1 2) ; do \
+		time LD_LIBRARY_PATH=build build/worker $(ADDR) $(PORT) $(CORES) & \
+	done
+	@printf "$(BYELLOW)TEST 2:$(RESET)\n"
+	LD_LIBRARY_PATH=build build/manager $(ADDR) $(PORT) $(TIME) 2
+	#3
+	for i in $$(seq 1 3) ; do \
+		time LD_LIBRARY_PATH=build build/worker $(ADDR) $(PORT) $(CORES) & \
+	done
+	@printf "$(BYELLOW)TEST 3:$(RESET)\n"
+	LD_LIBRARY_PATH=build build/manager $(ADDR) $(PORT) $(TIME) 3
 
 
 ##################################################################################################
-
-TEST: clean
-	gcc manager.c test_manager.c -o manager -lm
-	gcc worker.c test_worker.c -lm -o worker
-	./manager 127.0.0.1 1337 10 4 &
-	./worker 127.0.0.1 1337 &
-	./worker 127.0.0.1 1337 &
-	./worker 127.0.0.1 1337 &
-	./worker 127.0.0.1 1337 &
-
-lcov_: clean
-	gcc --coverage -fcondition-coverage manager.c test_manager.c -o manager -lm
-	gcc --coverage -fcondition-coverage worker.c test_worker.c -o worker -lm
-	./manager 127.0.0.1 1337 10 1 &
-	./worker 127.0.0.1 1337 &
-	lcov --branch-coverage --mcdc-coverage --gcov-tool=gcov -d . -c -o lcov.info
-	genhtml --function-coverage --branch-coverage --mcdc-coverage lcov.info
-
-	
 
 #---------------
 # Miscellaneous
 #---------------
+clean_and_build: clean
+	@mkdir build
 
 clean:
-	@printf "$(BYELLOW)Cleaning build directory$(RESET)\n"
-	@rm -rf *.gcda *.gcno build/* *.o *.so *.info *.html *.png *.css cmd_line lib/*.so lib/*.o lib/*.gcno
+	@printf "$(BYELLOW)Cleaning $(BCYAN)build directory$(RESET)\n"
+	@rm -rf *.gcda *.gcno build *.o *.so *.info *.html *.png *.css cmd_line build/*.so build/*.o lib/*.gcno SpecSem
 
 # List of non-file targets:
 .PHONY: run clean default

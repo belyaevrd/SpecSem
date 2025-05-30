@@ -211,7 +211,7 @@ static int manager_get_worker_ans(WORKER_CONN *work, char **ans) {
         fprintf(stderr, "Get %lu bytes from worker, expected %lu\n",bytes_read, ans_size);
         return 0;
     }
-    printf("[manager_get_worker_ans] get %lf\n", **(double **)ans);
+    printf("[manager_get_worker_ans] got %lf\n", **(double **)ans);
     return bytes_read;
 }
 
@@ -230,6 +230,7 @@ static bool manager_close_worker_socket(WORKER_CONN *work) {
 static bool wait_and_get_info_workers(INFO_MANAGER* manager, WORKER_CONN *works, struct pollfd *pollfds) {
     size_t num_connected_workers = 0U;
     size_t num_init_workers = 0U;
+    fprintf(stderr, "[wait_and_get_info_workers] Waiting workers\n");
     while (num_init_workers != manager->num_nodes)
     {
         if (num_connected_workers != manager->num_nodes) {
@@ -282,6 +283,7 @@ static bool wait_and_get_info_workers(INFO_MANAGER* manager, WORKER_CONN *works,
             }
         }
     }
+    fprintf(stderr, "[wait_and_get_info_workers] Waiting workers finished\n");
     return true;
 error:
     for(size_t i = 0; i < num_connected_workers; ++i) {
@@ -337,20 +339,16 @@ int start_manager(INFO_MANAGER *manager, size_t size_of_structure, size_t num_ta
     }
 
     size_t get_answers = 0;
-    while(get_answers != num_tasks) {
+    fprintf(stderr, "[start_manager] waiting answers\n");
+    while(get_answers != num_tasks && (manager->max_time > time(NULL) - start_time)) {
         time_t max_wait_time = manager->max_time - (time(NULL) - start_time);
-        int pollret = poll(pollfds, 1U + manager->num_nodes, max_wait_time);
+        int pollret = poll(pollfds, 1U + manager->num_nodes, 1000 * max_wait_time);
         if (pollret == -1)
         {
             fprintf(stderr, "Unable to poll-wait for data on descriptors!\n");
             goto error_close;
         }
 
-        // fprintf(stderr, "[start_manager] pollret=%d\n", pollret);
-        // if (pollret != num_tasks) {
-        //     fprintf(stderr, "Some workers didn't send their answers\n");
-        //     goto error_close;
-        // }
         for (size_t conn_i = 0U; conn_i < manager->num_nodes; ++conn_i) {
             if (pollfds[1U + conn_i].revents & POLLHUP)
             {  
@@ -367,7 +365,7 @@ int start_manager(INFO_MANAGER *manager, size_t size_of_structure, size_t num_ta
                     fprintf(stderr, "Unexpected state!\n");
                     goto error_close;
                 case WAIT_ANS:
-                    printf("[start_manager] getting answers\n");
+                    printf("[start_manager] got an answer\n");
                     if((ans_size = manager_get_worker_ans(&works[conn_i], &ans)) == 0) {
                         goto error_close;
                     }
@@ -381,6 +379,13 @@ int start_manager(INFO_MANAGER *manager, size_t size_of_structure, size_t num_ta
                 }
             }
         }
+    }
+    if (time(NULL) - start_time >= manager->max_time) {
+        fprintf(stderr, "Time is out\n");
+        goto error_close;
+    } else {
+        fprintf(stderr, "[start_manager] got answers\n");
+        fprintf(stderr, "TIME: %ds\n", time(NULL) - start_time);
     }
     free(pollfds);
     free(works);

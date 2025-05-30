@@ -3,9 +3,9 @@
 #include <stdlib.h>
 #include <math.h>
 
-double LEFT  = 0;
-double RIGHT = 1000000;
-double PRECISION = 0.01;
+double LEFT  = 1;
+double RIGHT = 2000000;
+double PRECISION = 0.0000001;
 
 struct task {
     size_t size_of_structure;
@@ -15,12 +15,13 @@ struct task {
 };
 
 // Вычисление одного шага по формуле остаточного члена метода прямоугольников
+// f(x) = sin(x)
 static double get_step() {
-    double max_ddf = (RIGHT);
+    double max_ddf = sin(RIGHT);
     if (max_ddf == 0) {
         return 1;
     }
-    return sqrt(24 * PRECISION / max_ddf);
+    return sqrt(24 * PRECISION / fabs(max_ddf));
 }
 
 int main(int argc, char *argv[]) {
