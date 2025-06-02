@@ -125,12 +125,36 @@ int distributed_counting(INFO_WORKER *worker, void*(thread_func(void*)))
     char *args[threads_num];
 
     for (int i = 0; i < threads_num; ++i) {
+        // Выбор ядра для выполнения потока.
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET(i % worker->n_cores, &cpuset);
+
+        pthread_attr_t thread_attr;
+        if(pthread_attr_init(&thread_attr)) {
+            fprintf(stderr, "pthread_attr_init returns with error\n");
+            return -1;
+        }
+
+        // Устанавливаем аффинность потока.
+        if (pthread_attr_setaffinity_np(&thread_attr, sizeof(cpuset), &cpuset)) {
+            fprintf(stderr, "pthread_attr_setaffinity_np returns with error\n");
+            return -1;
+        }
+
         args[i] = worker->data + worker->size_of_structure * i;
          
-        if (pthread_create(&threads[i], NULL, thread_func, args[i])) {
+        if (pthread_create(&threads[i], &thread_attr, thread_func, args[i])) {
             fprintf(stderr, "Unable to create thread\n");
             return -1;
         }
+
+        // Удаляем объект аттрибутов потока.
+        if (pthread_attr_destroy(&thread_attr)) {
+            fprintf(stderr, "Unable to destroy a thread attributes object\n");
+            return -1;
+        }
+
     }
 
     // Ждём завершения потоков
